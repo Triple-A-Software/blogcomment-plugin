@@ -1,0 +1,56 @@
+{#-
+  Theme sync for plugin iframes. The admin embeds dashboard cards / the plugin UI
+  in same-origin iframes but passes no theme info, so we read it from the parent:
+  copy the resolved Nuxt UI `--ui-*` colors and the `.dark` class onto our own
+  root. Falls back to the inline defaults below when the parent is unreachable
+  (cross-origin / opened standalone).
+-#}
+<style>
+    :root {
+        --ui-bg: #ffffff;
+        --ui-bg-muted: #f9fafb;
+        --ui-bg-elevated: #f3f4f6;
+        --ui-text: #111827;
+        --ui-text-muted: #6b7280;
+        --ui-text-highlighted: #030712;
+        --ui-border: #e5e7eb;
+        --ui-primary: #00b8db;
+        --ui-success: #16a34a;
+        --ui-warning: #d97706;
+        --ui-error: #dc2626;
+        --ui-info: #2563eb;
+    }
+    :root.dark {
+        --ui-bg: #111827;
+        --ui-bg-muted: #0b1220;
+        --ui-bg-elevated: #1f2937;
+        --ui-text: #f9fafb;
+        --ui-text-muted: #9ca3af;
+        --ui-text-highlighted: #ffffff;
+        --ui-border: #1f2937;
+    }
+</style>
+<script>
+    (function () {
+        var root = document.documentElement;
+        try {
+            var pdoc = window.parent.document;
+            if (pdoc.documentElement.classList.contains("dark")) root.classList.add("dark");
+            var tokens = ["--ui-bg", "--ui-bg-muted", "--ui-bg-elevated", "--ui-text",
+                "--ui-text-muted", "--ui-text-highlighted", "--ui-border", "--ui-primary",
+                "--ui-success", "--ui-warning", "--ui-error", "--ui-info"];
+            var probe = pdoc.createElement("span");
+            probe.style.cssText = "position:absolute;opacity:0;pointer-events:none";
+            pdoc.body.appendChild(probe);
+            var sentinel = "rgb(1, 2, 3)";
+            tokens.forEach(function (t) {
+                probe.style.color = "var(" + t + ", " + sentinel + ")";
+                var c = getComputedStyle(probe).color;
+                if (c && c !== sentinel) root.style.setProperty(t, c);
+            });
+            pdoc.body.removeChild(probe);
+        } catch (e) {
+            /* isolated / cross-origin: inline fallbacks apply */
+        }
+    })();
+</script>

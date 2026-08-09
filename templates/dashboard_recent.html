@@ -1,0 +1,32 @@
+{% include "theme_head.html" %}
+<style>
+    html, body { background: var(--ui-bg); margin: 0; }
+    .bc-card { font-family: system-ui, sans-serif; padding: 16px; color: var(--ui-text); }
+    .bc-head { display: flex; align-items: baseline; gap: 8px; }
+    .bc-n { font-size: 26px; font-weight: 700; }
+    .bc-muted { color: var(--ui-text-muted); font-size: 13px; }
+    .bc-list { margin: 12px 0 0; padding: 0; list-style: none; font-size: 13px; }
+    .bc-list li { padding: 7px 0; border-top: 1px solid var(--ui-border); }
+    .bc-row { display: flex; justify-content: space-between; gap: 8px; }
+    .bc-author { font-weight: 600; }
+    .bc-date { color: var(--ui-text-muted); }
+    .bc-snippet { color: var(--ui-text-muted); margin-top: 2px; }
+</style>
+<div class="bc-card">
+    <div class="bc-head">
+        <span class="bc-n">{{ approved }}</span>
+        <span class="bc-muted">freigegebene Kommentare insgesamt</span>
+    </div>
+    {% if comments %}
+    <ul class="bc-list">
+        {% for c in comments %}
+        <li>
+            <div class="bc-row"><span class="bc-author">{{ c.author }}</span><span class="bc-date">{{ c.date }}</span></div>
+            <div class="bc-snippet">{{ c.snippet }}</div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="bc-muted" style="margin: 12px 0 0;">Noch keine freigegebenen Kommentare.</p>
+    {% endif %}
+</div>

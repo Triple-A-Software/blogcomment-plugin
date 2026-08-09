@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Blog Comments</title>
+    <style>
+        /* Nuxt UI theme tokens — overwritten at runtime from the parent admin
+           document (see the script below); these are the standalone fallbacks. */
+        :root {
+            --ui-bg: #ffffff;
+            --ui-bg-muted: #f9fafb;
+            --ui-bg-elevated: #f3f4f6;
+            --ui-text: #111827;
+            --ui-text-muted: #6b7280;
+            --ui-text-highlighted: #030712;
+            --ui-border: #e5e7eb;
+            --ui-primary: #00b8db;
+            --ui-success: #16a34a;
+            --ui-warning: #d97706;
+            --ui-error: #dc2626;
+            --ui-info: #2563eb;
+        }
+        :root.dark {
+            --ui-bg: #111827;
+            --ui-bg-muted: #0b1220;
+            --ui-bg-elevated: #1f2937;
+            --ui-text: #f9fafb;
+            --ui-text-muted: #9ca3af;
+            --ui-text-highlighted: #ffffff;
+            --ui-border: #1f2937;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; color: var(--ui-text); background: var(--ui-bg-muted); }
+        header { padding: 20px 24px; background: var(--ui-bg); border-bottom: 1px solid var(--ui-border); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        h1 { font-size: 18px; margin: 0; }
+        h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-text-muted); margin: 24px 0 8px; }
+        main { padding: 24px; max-width: 1040px; margin: 0 auto; }
+        .cards { display: flex; gap: 16px; flex-wrap: wrap; }
+        .card { background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 12px; padding: 16px 20px; min-width: 120px; }
+        .card .n { font-size: 26px; font-weight: 700; }
+        .card .l { font-size: 12px; color: var(--ui-text-muted); }
+        .tabs { display: flex; gap: 6px; margin: 20px 0 10px; flex-wrap: wrap; }
+        .tab { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--ui-border); background: var(--ui-bg); color: var(--ui-text); cursor: pointer; font: inherit; font-size: 13px; }
+        .tab.active { background: var(--ui-primary); color: #1a1a1a; border-color: transparent; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 12px; overflow: hidden; }
+        th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--ui-border); font-size: 14px; vertical-align: top; }
+        th { color: var(--ui-text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+        tr:last-child td { border-bottom: none; }
+        .who { font-weight: 600; }
+        .email { color: var(--ui-text-muted); font-size: 12px; font-weight: 400; }
+        .body { white-space: pre-wrap; word-break: break-word; max-width: 380px; }
+        .post { color: var(--ui-text-muted); font-size: 13px; }
+        .date { color: var(--ui-text-muted); font-size: 12px; white-space: nowrap; }
+        .pill { display: inline-block; padding: 1px 7px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+        .pill.pending { background: color-mix(in srgb, var(--ui-warning) 18%, transparent); color: var(--ui-warning); }
+        .pill.approved { background: color-mix(in srgb, var(--ui-success) 18%, transparent); color: var(--ui-success); }
+        .pill.spam { background: color-mix(in srgb, var(--ui-error) 16%, transparent); color: var(--ui-error); }
+        .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        button { font: inherit; padding: 6px 11px; border-radius: 7px; border: 1px solid var(--ui-border); background: var(--ui-bg); color: var(--ui-text); cursor: pointer; font-size: 13px; }
+        button.primary { background: var(--ui-primary); color: #1a1a1a; border-color: transparent; font-weight: 600; }
+        button.danger { color: var(--ui-error); }
+        button:disabled { opacity: .5; cursor: default; }
+        .muted { color: var(--ui-text-muted); }
+        .panel { background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 12px; padding: 16px 20px; }
+        .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; max-width: 360px; }
+        .field.row-check { flex-direction: row; align-items: center; gap: 8px; }
+        .field label { font-size: 13px; font-weight: 600; }
+        .field input, .field select { font: inherit; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-bg); color: var(--ui-text); }
+        .hint { font-size: 12px; color: var(--ui-text-muted); }
+        #settings-status { font-size: 13px; color: var(--ui-text-muted); }
+        .row { display: flex; align-items: center; gap: 8px; }
+    </style>
+    <script>
+        // Match the admin theme: copy resolved Nuxt UI colors + dark class from the parent.
+        (function () {
+            var root = document.documentElement;
+            try {
+                var pdoc = window.parent.document;
+                if (pdoc.documentElement.classList.contains("dark")) root.classList.add("dark");
+                var tokens = ["--ui-bg", "--ui-bg-muted", "--ui-bg-elevated", "--ui-text",
+                    "--ui-text-muted", "--ui-text-highlighted", "--ui-border", "--ui-primary",
+                    "--ui-success", "--ui-warning", "--ui-error", "--ui-info"];
+                var probe = pdoc.createElement("span");
+                probe.style.cssText = "position:absolute;opacity:0;pointer-events:none";
+                pdoc.body.appendChild(probe);
+                var sentinel = "rgb(1, 2, 3)";
+                tokens.forEach(function (t) {
+                    probe.style.color = "var(" + t + ", " + sentinel + ")";
+                    var c = getComputedStyle(probe).color;
+                    if (c && c !== sentinel) root.style.setProperty(t, c);
+                });
+                pdoc.body.removeChild(probe);
+            } catch (e) { /* isolated / cross-origin: fallbacks apply */ }
+        })();
+    </script>
+</head>
+<body>
+    <header>
+        <h1>Blog Comments</h1>
+    </header>
+    <main>
+        <div class="cards" id="cards"></div>
+
+        <div class="tabs" id="tabs">
+            <button class="tab active" data-status="pending">Pending</button>
+            <button class="tab" data-status="approved">Approved</button>
+            <button class="tab" data-status="spam">Spam</button>
+            <button class="tab" data-status="all">All</button>
+        </div>
+        <table id="comments">
+            <thead>
+                <tr><th>Author</th><th>Comment</th><th>Post</th><th>Date</th><th>Actions</th></tr>
+            </thead>
+            <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+        </table>
+
+        <h2>Settings</h2>
+        <div class="panel">
+            <div class="field row-check">
+                <input id="require_moderation" type="checkbox">
+                <label for="require_moderation">Require approval before comments appear</label>
+            </div>
+            <div class="field row-check">
+                <input id="collect_email" type="checkbox">
+                <label for="collect_email">Ask commenters for their email (optional field)</label>
+            </div>
+            <div class="field">
+                <label for="captcha_provider">Captcha</label>
+                <select id="captcha_provider">
+                    <option value="none">None</option>
+                    <option value="hcaptcha">hCaptcha</option>
+                    <option value="recaptcha">reCAPTCHA</option>
+                </select>
+                <span class="hint">Optional. Adds a challenge to the comment form.</span>
+            </div>
+            <div class="field">
+                <label for="captcha_site_key">Captcha site key</label>
+                <input id="captcha_site_key" type="text" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="captcha_secret">Captcha secret</label>
+                <input id="captcha_secret" type="text" autocomplete="off">
+            </div>
+            <div class="row">
+                <button class="primary" id="save-settings">Save settings</button>
+                <span id="settings-status"></span>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const base = location.pathname.replace(/\/ui\/?(index\.html)?$/, "");
+        // The backend proxies plugin API routes at `<base>/api` + the manifest
+        // route (which itself starts with `/api/...`), so the path is doubled.
+        const api = (p) => base + "/api" + p;
+        const esc = (s) => (s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+        const fmtDate = (s) => { try { return new Date(s).toLocaleString(); } catch { return s; } };
+
+        let filter = "pending";
+
+        async function loadStats() {
+            const s = await fetch(api("/api/stats")).then(r => r.json());
+            document.getElementById("cards").innerHTML = [
+                ["Pending", s.pending, "var(--ui-warning)"],
+                ["Approved", s.approved, "var(--ui-success)"],
+                ["Spam", s.spam, "var(--ui-error)"],
+                ["Total", s.total, "var(--ui-text)"],
+            ].map(([l, n, c]) => `<div class="card"><div class="n" style="color:${c}">${n}</div><div class="l">${l}</div></div>`).join("");
+        }
+
+        function actionsFor(c) {
+            const btns = [];
+            if (c.status !== "approved") btns.push(`<button class="primary" data-id="${c.id}" data-action="approve">Approve</button>`);
+            if (c.status !== "spam") btns.push(`<button data-id="${c.id}" data-action="spam">Spam</button>`);
+            if (c.status !== "pending") btns.push(`<button data-id="${c.id}" data-action="pending">Unpublish</button>`);
+            btns.push(`<button class="danger" data-id="${c.id}" data-action="delete">Delete</button>`);
+            return `<div class="actions">${btns.join("")}</div>`;
+        }
+
+        async function loadComments() {
+            const q = filter === "all" ? "" : "?status=" + filter;
+            const rows = await fetch(api("/api/comments" + q)).then(r => r.json());
+            const tb = document.querySelector("#comments tbody");
+            if (!rows.length) { tb.innerHTML = `<tr><td colspan="5" class="muted">No comments here.</td></tr>`; return; }
+            tb.innerHTML = rows.map(c => `<tr>
+                <td><div class="who">${esc(c.author_name)}</div>${c.author_email ? `<div class="email">${esc(c.author_email)}</div>` : ""}<span class="pill ${c.status}">${c.status}</span></td>
+                <td><div class="body">${esc(c.body)}</div></td>
+                <td class="post">${esc(c.post_title) || ("#" + c.post_id)}</td>
+                <td class="date">${fmtDate(c.created_at)}</td>
+                <td>${actionsFor(c)}</td>
+            </tr>`).join("");
+            tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", () => moderate(b)));
+        }
+
+        async function moderate(btn) {
+            const id = Number(btn.dataset.id), action = btn.dataset.action;
+            if (action === "delete" && !confirm("Delete this comment permanently?")) return;
+            btn.disabled = true;
+            try {
+                await fetch(api("/api/comments/moderate"), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id, action }),
+                });
+                await refresh();
+            } catch { btn.disabled = false; }
+        }
+
+        async function refresh() { await Promise.all([loadStats(), loadComments()]); }
+
+        document.querySelectorAll("#tabs .tab").forEach(tab => tab.addEventListener("click", () => {
+            filter = tab.dataset.status;
+            document.querySelectorAll("#tabs .tab").forEach(t => t.classList.toggle("active", t === tab));
+            loadComments();
+        }));
+
+        async function loadSettings() {
+            const s = await fetch(api("/api/settings")).then(r => r.json());
+            document.getElementById("require_moderation").checked = s.require_moderation;
+            document.getElementById("collect_email").checked = s.collect_email;
+            document.getElementById("captcha_provider").value = s.captcha_provider || "none";
+            document.getElementById("captcha_site_key").value = s.captcha_site_key || "";
+            document.getElementById("captcha_secret").value = s.captcha_secret || "";
+        }
+
+        document.getElementById("save-settings").addEventListener("click", async (e) => {
+            const status = document.getElementById("settings-status");
+            e.target.disabled = true; status.textContent = "Saving…";
+            const body = {
+                require_moderation: document.getElementById("require_moderation").checked,
+                collect_email: document.getElementById("collect_email").checked,
+                captcha_provider: document.getElementById("captcha_provider").value,
+                captcha_site_key: document.getElementById("captcha_site_key").value.trim() || null,
+                captcha_secret: document.getElementById("captcha_secret").value.trim() || null,
+            };
+            try {
+                const s = await fetch(api("/api/settings"), {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                }).then(r => r.json());
+                document.getElementById("captcha_provider").value = s.captcha_provider || "none";
+                status.textContent = "Saved.";
+            } catch { status.textContent = "Failed to save."; }
+            e.target.disabled = false;
+            setTimeout(() => { status.textContent = ""; }, 2500);
+        });
+
+        refresh();
+        loadSettings();
+    </script>
+</body>
+</html>

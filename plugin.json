@@ -1,0 +1,72 @@
+{
+    "$schema": "https://neleto.io/schemas/main/plugin_manifest_schema.json",
+    "name": "blog-comments",
+    "version": "1.0.0",
+    "bin": "./target/x86_64-unknown-linux-gnu/release/blog-comments",
+    "include_files": [
+        "ui/dist/**/*",
+        "target/x86_64-unknown-linux-gnu/release/blog-comments",
+        "templates/**/*"
+    ],
+    "ui": "/ui",
+    "helpers": [
+        {
+            "name": "comments",
+            "route": "/helper/comments",
+            "type": "inline",
+            "return_value": "String",
+            "arguments": ["Number"]
+        }
+    ],
+    "pages": [
+        {
+            "name": "Comment submit",
+            "route": "/comments/submit",
+            "allow_select_layout": false
+        }
+    ],
+    "api": [
+        {
+            "route": "/api/comments",
+            "allowed_roles": ["admin", "developer", "editor"]
+        },
+        {
+            "route": "/api/comments/moderate",
+            "allowed_roles": ["admin", "developer", "editor"]
+        },
+        {
+            "route": "/api/stats",
+            "allowed_roles": ["admin", "developer", "editor"]
+        },
+        {
+            "route": "/api/settings",
+            "allowed_roles": ["admin", "developer"]
+        }
+    ],
+    "dashboard_cards": [
+        {
+            "name": "pending-comments",
+            "route": "/dashboard/pending",
+            "label": {
+                "de": "Kommentare zur Freigabe",
+                "en": "Comments to Review"
+            },
+            "description": {
+                "de": "Kommentare, die auf Moderation warten",
+                "en": "Comments awaiting moderation"
+            }
+        },
+        {
+            "name": "recent-comments",
+            "route": "/dashboard/recent",
+            "label": {
+                "de": "Neueste Kommentare",
+                "en": "Latest Comments"
+            },
+            "description": {
+                "de": "Die zuletzt freigegebenen Kommentare",
+                "en": "The most recently approved comments"
+            }
+        }
+    ]
+}
