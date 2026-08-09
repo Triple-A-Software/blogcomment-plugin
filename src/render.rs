@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use crate::{
+    lang::Lang,
     model::{CommentPublic, CommentSettings},
     utils::{escape_html, escape_multiline},
 };
@@ -14,44 +15,44 @@ use crate::{
 /// markup but stop indenting further.
 const MAX_DEPTH: usize = 4;
 
-/// Render the whole `#comments` block: an optional status banner, the threaded
-/// comment tree, and the submit form. `path` is the current page path,
-/// submitted as the redirect target so the browser returns here after posting.
+/// Render the whole `#comments` block: the threaded comment tree and the submit
+/// form, in the page's language. `path` is the current page path, submitted as
+/// the redirect target so the browser returns here after posting.
+///
+/// The post-submit confirmation banner is *not* rendered here — it's injected
+/// client-side from the `?comment=<flag>` query param, because Neleto's page
+/// cache key ignores the query string (a server-rendered banner would be cached
+/// and shown to the wrong visitors, or missed entirely).
 pub fn thread_and_form(
     post_id: i32,
     path: &str,
     comments: &[CommentPublic],
     settings: &CommentSettings,
-    flag: Option<&str>,
+    lang: Lang,
 ) -> String {
     let mut out = String::new();
     out.push_str(STYLE);
     out.push_str(r#"<section id="comments" class="bc">"#);
 
-    if let Some(banner) = flag.and_then(status_banner) {
-        out.push_str(&banner);
-    }
-
     let count = comments.len();
-    let noun = if count == 1 { "Kommentar" } else { "Kommentare" };
-    out.push_str(&format!(r#"<h2 class="bc-heading">{count} {noun}</h2>"#));
+    out.push_str(&format!(r#"<h2 class="bc-heading">{}</h2>"#, lang.heading(count)));
 
     if comments.is_empty() {
-        out.push_str(r#"<p class="bc-empty">Seien Sie der Erste, der kommentiert.</p>"#);
+        out.push_str(&format!(r#"<p class="bc-empty">{}</p>"#, lang.be_first()));
     } else {
         // Group comment indices by parent so we can render the reply tree.
         let mut children: HashMap<Option<i64>, Vec<&CommentPublic>> = HashMap::new();
         for c in comments {
             children.entry(c.parent_id).or_default().push(c);
         }
-        render_nodes(&mut out, &children, None, 0, post_id, path, settings);
+        render_nodes(&mut out, &children, None, 0, post_id, path, settings, lang);
     }
 
     // New top-level comment form (carries the captcha, if any).
-    out.push_str(r#"<h3 class="bc-form-title">Kommentar schreiben</h3>"#);
-    out.push_str(&comment_form(post_id, path, settings, None, true));
+    out.push_str(&format!(r#"<h3 class="bc-form-title">{}</h3>"#, lang.write_comment()));
+    out.push_str(&comment_form(post_id, path, settings, None, true, lang));
     out.push_str("</section>");
-    out.push_str(SCRIPT);
+    out.push_str(&script(lang));
     out
 }
 
@@ -64,6 +65,7 @@ fn render_nodes(
     post_id: i32,
     path: &str,
     settings: &CommentSettings,
+    lang: Lang,
 ) {
     let Some(nodes) = children.get(&parent) else {
         return;
@@ -74,7 +76,7 @@ fn render_nodes(
         out.push_str(&format!(
             r#"<div class="bc-meta"><span class="bc-author">{author}</span><time class="bc-date">{date}</time></div><div class="bc-body">{body}</div>"#,
             author = escape_html(&c.author_name),
-            date = c.created_at.format("%d.%m.%Y %H:%M"),
+            date = c.created_at.format(lang.date_fmt()),
             body = escape_multiline(&c.body),
         ));
         // Actions: like + reply.
@@ -85,12 +87,12 @@ fn render_nodes(
             path = escape_html(path),
             likes = c.likes,
         ));
-        out.push_str(r#"<details class="bc-reply"><summary>Antworten</summary>"#);
-        out.push_str(&comment_form(post_id, path, settings, Some(c.id), false));
+        out.push_str(&format!(r#"<details class="bc-reply"><summary>{}</summary>"#, lang.reply()));
+        out.push_str(&comment_form(post_id, path, settings, Some(c.id), false, lang));
         out.push_str("</details></div>");
 
         // Replies.
-        render_nodes(out, children, Some(c.id), depth + 1, post_id, path, settings);
+        render_nodes(out, children, Some(c.id), depth + 1, post_id, path, settings, lang);
         out.push_str("</li>");
     }
     out.push_str("</ol>");
@@ -102,6 +104,7 @@ fn comment_form(
     settings: &CommentSettings,
     parent_id: Option<i64>,
     with_captcha: bool,
+    lang: Lang,
 ) -> String {
     let mut f = String::new();
     f.push_str(r#"<form class="bc-form" method="post" action="/comments/submit">"#);
@@ -119,22 +122,28 @@ fn comment_form(
         r#"<div class="bc-hp" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>"#,
     );
 
-    f.push_str(
-        r#"<div class="bc-field"><label>Name<input name="author_name" type="text" required maxlength="120"></label></div>"#,
-    );
+    f.push_str(&format!(
+        r#"<div class="bc-field"><label>{name}<input name="author_name" type="text" required maxlength="120"></label></div>"#,
+        name = lang.name(),
+    ));
     if settings.collect_email {
-        f.push_str(
-            r#"<div class="bc-field"><label>E-Mail (wird nicht veröffentlicht)<input name="author_email" type="email" maxlength="254"></label></div>"#,
-        );
+        f.push_str(&format!(
+            r#"<div class="bc-field"><label>{email}<input name="author_email" type="email" maxlength="254"></label></div>"#,
+            email = lang.email(),
+        ));
     }
-    f.push_str(
-        r#"<div class="bc-field"><label>Kommentar<textarea name="body" required rows="4" maxlength="5000"></textarea></label></div>"#,
-    );
+    f.push_str(&format!(
+        r#"<div class="bc-field"><label>{comment}<textarea name="body" required rows="4" maxlength="5000"></textarea></label></div>"#,
+        comment = lang.comment(),
+    ));
 
     if with_captcha {
         f.push_str(&captcha_widget(settings));
     }
-    f.push_str(r#"<button class="bc-submit" type="submit">Absenden</button></form>"#);
+    f.push_str(&format!(
+        r#"<button class="bc-submit" type="submit">{}</button></form>"#,
+        lang.submit()
+    ));
     f
 }
 
@@ -152,18 +161,6 @@ fn captcha_widget(settings: &CommentSettings) -> String {
         ),
         _ => String::new(),
     }
-}
-
-fn status_banner(flag: &str) -> Option<String> {
-    let (kind, msg) = match flag {
-        "received" => ("ok", "Danke! Ihr Kommentar wird nach einer kurzen Prüfung veröffentlicht."),
-        "posted" => ("ok", "Danke für Ihren Kommentar!"),
-        "captcha" => ("err", "Bitte bestätigen Sie, dass Sie kein Roboter sind, und senden Sie erneut."),
-        "slow_down" => ("err", "Zu viele Kommentare in kurzer Zeit. Bitte versuchen Sie es gleich noch einmal."),
-        "error" => ("err", "Ihr Kommentar konnte nicht gespeichert werden. Bitte prüfen Sie Ihre Eingaben."),
-        _ => return None,
-    };
-    Some(format!(r#"<p class="bc-banner bc-banner--{kind}">{msg}</p>"#))
 }
 
 const STYLE: &str = r#"<style>
@@ -196,25 +193,70 @@ const STYLE: &str = r#"<style>
 .bc-submit { align-self: flex-start; padding: 10px 18px; border: 0; border-radius: 8px; background: #111827; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
 </style>"#;
 
-const SCRIPT: &str = r#"<script>
+/// The inline behaviour script for the comment block, localized for `lang`.
+///
+/// Rendered with `inline="true"` so Neleto's HTML rewriter leaves it in place
+/// instead of hoisting it into `<head>` — but it's *also* written to work if it
+/// is hoisted: the like handler is bound via event delegation on `document`
+/// (which always exists), so a click is intercepted rather than falling back to
+/// a native form submit that reloads the page. DOM-dependent setup waits for
+/// `DOMContentLoaded`.
+///
+/// It also injects the post-submit confirmation banner from `?comment=<flag>`
+/// on the client, since the server can't (Neleto caches the page ignoring the
+/// query string). The localized flag→message table is emitted as `B`.
+fn script(lang: Lang) -> String {
+    let banners: serde_json::Map<String, serde_json::Value> = lang
+        .banners()
+        .iter()
+        .map(|(flag, kind, msg)| (flag.to_string(), serde_json::json!([kind, msg])))
+        .collect();
+    let banners = serde_json::Value::Object(banners).to_string();
+    SCRIPT_TEMPLATE.replace("/*BANNERS*/null", &banners)
+}
+
+const SCRIPT_TEMPLATE: &str = r#"<script inline="true">
 (function(){
-  document.querySelectorAll('input.bc-ts').forEach(function(el){ el.value = Date.now(); });
-  document.querySelectorAll('form.bc-like').forEach(function(f){
-    f.addEventListener('submit', function(e){
-      e.preventDefault();
-      var id = f.querySelector('input[name=comment_id]').value;
-      fetch('/comments/react', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(new FormData(f)).toString()
-      }).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
-        if (d && typeof d.likes === 'number') {
-          var s = document.getElementById('likes-' + id);
-          if (s) s.textContent = d.likes;
-          var b = f.querySelector('button'); if (b) b.disabled = true;
-        }
-      }).catch(function(){});
-    });
+  var B = /*BANNERS*/null;
+  function ready(fn){ if (document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  ready(function(){
+    document.querySelectorAll('input.bc-ts').forEach(function(el){ el.value = Date.now(); });
+    // Post-submit confirmation banner, from the ?comment=<flag> the submit redirect adds.
+    try {
+      var params = new URLSearchParams(location.search);
+      var flag = params.get('comment');
+      var sec = document.getElementById('comments');
+      if (flag && B[flag] && sec) {
+        var p = document.createElement('p');
+        p.className = 'bc-banner bc-banner--' + B[flag][0];
+        p.textContent = B[flag][1];
+        sec.insertBefore(p, sec.firstChild);
+        // Drop the flag so a refresh doesn't re-show the banner.
+        params.delete('comment');
+        var qs = params.toString();
+        history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + '#comments');
+      }
+    } catch (e) {}
+  });
+  // Like via delegation on document — survives this script being hoisted to <head>.
+  document.addEventListener('submit', function(e){
+    var f = e.target;
+    if (!(f instanceof HTMLFormElement) || !f.classList.contains('bc-like')) return;
+    e.preventDefault();
+    var idEl = f.querySelector('input[name=comment_id]');
+    if (!idEl) return;
+    var id = idEl.value;
+    fetch('/comments/react', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(new FormData(f)).toString()
+    }).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+      if (d && typeof d.likes === 'number') {
+        var s = document.getElementById('likes-' + id);
+        if (s) s.textContent = d.likes;
+        var b = f.querySelector('button'); if (b) b.disabled = true;
+      }
+    }).catch(function(){});
   });
 })();
 </script>"#;
@@ -242,7 +284,7 @@ mod tests {
             "/blog/post",
             &[comment(1, None, "<script>evil</script>", "line1\nline2 <b>x</b>")],
             &CommentSettings::default(),
-            None,
+            Lang::De,
         );
         assert!(out.contains("&lt;script&gt;evil"));
         assert!(!out.contains("<script>evil"));
@@ -251,7 +293,7 @@ mod tests {
 
     #[test]
     fn top_form_carries_post_id_and_redirect_and_honeypot() {
-        let out = thread_and_form(42, "/blog/hi", &[], &CommentSettings::default(), None);
+        let out = thread_and_form(42, "/blog/hi", &[], &CommentSettings::default(), Lang::De);
         assert!(out.contains(r#"name="post_id" value="42""#));
         assert!(out.contains(r#"name="redirect" value="/blog/hi""#));
         assert!(out.contains(r#"name="website""#));
@@ -267,7 +309,7 @@ mod tests {
                 comment(2, Some(1), "Bob", "reply"),
             ],
             &CommentSettings::default(),
-            None,
+            Lang::De,
         );
         assert!(out.contains(r#"id="comment-1""#));
         assert!(out.contains(r#"id="comment-2""#));
@@ -279,7 +321,7 @@ mod tests {
     fn like_button_shows_count() {
         let mut c = comment(9, None, "Ann", "hi");
         c.likes = 3;
-        let out = thread_and_form(1, "/", &[c], &CommentSettings::default(), None);
+        let out = thread_and_form(1, "/", &[c], &CommentSettings::default(), Lang::De);
         assert!(out.contains(r#"id="likes-9""#));
         assert!(out.contains(">3</span>"));
         assert!(out.contains(r#"action="/comments/react""#));
@@ -288,9 +330,9 @@ mod tests {
     #[test]
     fn email_field_toggles_with_setting() {
         let mut s = CommentSettings::default();
-        assert!(thread_and_form(1, "/", &[], &s, None).contains(r#"name="author_email""#));
+        assert!(thread_and_form(1, "/", &[], &s, Lang::De).contains(r#"name="author_email""#));
         s.collect_email = false;
-        assert!(!thread_and_form(1, "/", &[], &s, None).contains(r#"name="author_email""#));
+        assert!(!thread_and_form(1, "/", &[], &s, Lang::De).contains(r#"name="author_email""#));
     }
 
     #[test]
@@ -301,7 +343,40 @@ mod tests {
             ..CommentSettings::default()
         };
         // A thread with one comment: top form has the widget, the reply form does not.
-        let out = thread_and_form(1, "/", &[comment(1, None, "A", "b")], &s, None);
+        let out = thread_and_form(1, "/", &[comment(1, None, "A", "b")], &s, Lang::De);
         assert_eq!(out.matches("h-captcha").count(), 1);
+    }
+
+    #[test]
+    fn renders_in_the_requested_language() {
+        let de = thread_and_form(1, "/", &[], &CommentSettings::default(), Lang::De);
+        assert!(de.contains("Kommentare"));
+        assert!(de.contains("Seien Sie der Erste"));
+        assert!(de.contains(">Absenden</button>"));
+
+        let en = thread_and_form(1, "/", &[], &CommentSettings::default(), Lang::En);
+        assert!(en.contains("Comments"));
+        assert!(en.contains("Be the first to comment."));
+        assert!(en.contains(">Submit</button>"));
+        assert!(!en.contains("Kommentare"));
+    }
+
+    #[test]
+    fn heading_is_singular_for_one_comment() {
+        let out = thread_and_form(1, "/", &[comment(1, None, "A", "b")], &CommentSettings::default(), Lang::En);
+        assert!(out.contains(">1 Comment</h2>"));
+    }
+
+    #[test]
+    fn script_is_inline_delegated_and_carries_localized_banners() {
+        let out = thread_and_form(1, "/", &[], &CommentSettings::default(), Lang::En);
+        // inline="true" keeps Neleto from hoisting the script into <head>...
+        assert!(out.contains(r#"<script inline="true">"#));
+        // ...and delegation means a hoisted script still catches the like submit.
+        assert!(out.contains("document.addEventListener('submit'"));
+        // Localized confirmation-banner table is embedded for the client to render.
+        assert!(out.contains("Your comment will be published"));
+        let de = thread_and_form(1, "/", &[], &CommentSettings::default(), Lang::De);
+        assert!(de.contains("kurzen Prüfung veröffentlicht"));
     }
 }

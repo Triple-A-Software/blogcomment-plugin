@@ -7,6 +7,7 @@ pub mod antispam;
 pub mod api;
 pub mod database;
 pub mod email;
+pub mod lang;
 pub mod model;
 pub mod render;
 pub mod utils;

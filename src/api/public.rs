@@ -12,7 +12,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::{AppState, antispam, database, email, render, utils::escape_html};
+use crate::{AppState, antispam, database, email, lang::Lang, render, utils::escape_html};
 
 // ---------------------------------------------------------------------------
 // Helper: {{ comments(post.id) }}
@@ -35,15 +35,15 @@ fn data(html: String) -> HelperResp {
 
 #[derive(Deserialize)]
 pub struct PageRenderInput {
-    #[allow(dead_code)]
+    /// The CMS page's language code (e.g. `"de"`, `"en-US"`); drives the UI language.
     pub language: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct HelperBody {
     pub json_args: Vec<Value>,
-    #[allow(dead_code)]
     pub page: PageRenderInput,
+    #[allow(dead_code)]
     pub query: HashMap<String, String>,
     pub params: HashMap<String, String>,
     pub route: String,
@@ -94,9 +94,11 @@ pub async fn comments_helper(State(state): State<AppState>, Json(body): Json<Hel
     let comments = database::approved_comments(&state.db, post_id).await.unwrap_or_default();
     let settings = database::get_settings(&state.db).await.unwrap_or_default();
     let path = resolve_path(&body.route, &body.params);
-    let flag = body.query.get("comment").map(String::as_str);
+    // The page language drives the UI language; the post-submit confirmation
+    // banner is rendered client-side (see `render::script`), not from the query.
+    let lang = Lang::from_code(body.page.language.as_deref());
 
-    data(render::thread_and_form(post_id, &path, &comments, &settings, flag))
+    data(render::thread_and_form(post_id, &path, &comments, &settings, lang))
 }
 
 // ---------------------------------------------------------------------------
@@ -256,9 +258,9 @@ async fn notify(
 
     // Moderator notification on every new comment.
     if let Some(to) = settings.notify_email.clone().filter(|s| !s.is_empty()) {
-        let subject = format!("Neuer Kommentar: {post_title}");
+        let subject = format!("New comment: {post_title}");
         let html = format!(
-            "<p>Ein neuer Kommentar von <strong>{who}</strong> zu „{title}“ wartet auf Freigabe.</p><blockquote>{snippet}</blockquote>"
+            "<p>A new comment from <strong>{who}</strong> on “{title}” is awaiting approval.</p><blockquote>{snippet}</blockquote>"
         );
         tokio::spawn(async move { email::send(&to, &subject, &html).await });
     }
@@ -268,9 +270,9 @@ async fn notify(
         && let Ok(Some(to)) = database::author_email(&state.db, pid).await
         && !to.is_empty()
     {
-        let subject = format!("Neue Antwort auf Ihren Kommentar: {post_title}");
+        let subject = format!("New reply to your comment: {post_title}");
         let html = format!(
-            "<p><strong>{who}</strong> hat auf Ihren Kommentar zu „{title}“ geantwortet:</p><blockquote>{snippet}</blockquote>"
+            "<p><strong>{who}</strong> replied to your comment on “{title}”:</p><blockquote>{snippet}</blockquote>"
         );
         tokio::spawn(async move { email::send(&to, &subject, &html).await });
     }

@@ -15,7 +15,7 @@
 <div class="bc-card">
     <div class="bc-head">
         <span class="bc-n">{{ count }}</span>
-        <span class="bc-muted">Kommentare warten auf Freigabe</span>
+        <span class="bc-muted">comments awaiting approval</span>
     </div>
     {% if comments %}
     <ul class="bc-list">
@@ -27,6 +27,6 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="bc-muted" style="margin: 12px 0 0;">Nichts zu moderieren – alles erledigt. 🎉</p>
+    <p class="bc-muted" style="margin: 12px 0 0;">Nothing to moderate — all caught up. 🎉</p>
     {% endif %}
 </div>

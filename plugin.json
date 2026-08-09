@@ -1,7 +1,7 @@
 {
     "$schema": "https://neleto.io/schemas/main/plugin_manifest_schema.json",
     "name": "blog-comments",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "bin": "./target/x86_64-unknown-linux-gnu/release/blog-comments",
     "include_files": [
         "ui/dist/**/*",
@@ -15,7 +15,7 @@
             "route": "/helper/comments",
             "type": "inline",
             "return_value": "String",
-            "arguments": ["Number"]
+            "arguments": ["Int"]
         }
     ],
     "pages": [

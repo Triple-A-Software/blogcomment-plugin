@@ -15,7 +15,7 @@
 <div class="bc-card">
     <div class="bc-head">
         <span class="bc-n">{{ approved }}</span>
-        <span class="bc-muted">freigegebene Kommentare insgesamt</span>
+        <span class="bc-muted">approved comments in total</span>
     </div>
     {% if comments %}
     <ul class="bc-list">
@@ -27,6 +27,6 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="bc-muted" style="margin: 12px 0 0;">Noch keine freigegebenen Kommentare.</p>
+    <p class="bc-muted" style="margin: 12px 0 0;">No approved comments yet.</p>
     {% endif %}
 </div>
