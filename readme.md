@@ -12,18 +12,23 @@ cards keep you on top of what needs attention.
 ## Why you'll want it
 
 - **Build a community.** Give readers a place to react, ask, and discuss right
-  under your posts.
+  under your posts — with **threaded replies** and **likes**.
 - **You're in control.** Every comment waits for your approval by default —
   nothing appears until you say so. Approve, mark spam, or delete in one click.
 - **Spam-resistant out of the box.** A hidden honeypot field and a submit
-  time-trap stop naive bots, and you can switch on **hCaptcha** or **reCAPTCHA**
-  for a real challenge — no coding required.
+  time-trap stop naive bots; switch on **hCaptcha**/**reCAPTCHA** for a real
+  challenge, and add an **Akismet** key for automatic spam filtering — no coding.
+- **Stay in the loop.** Get an **email** whenever a new comment needs review, and
+  your commenters get notified when someone replies to them.
 - **Self-hosted & private.** Comments never leave your server. No external
   tracking scripts on your pages.
+- **Privacy-ready.** One-click **erase or anonymize** all comments for an email
+  address, so you can honour data-deletion requests.
 - **At a glance.** Dashboard cards show how many comments await review and your
   latest approved ones.
-- **Works without JavaScript.** The comment form is a plain HTML form — it posts
-  and shows a confirmation even with scripts disabled.
+- **Works without JavaScript.** The comment form is a plain HTML form — it posts,
+  replies, and even likes work with scripts disabled (they just get smoother with
+  JS on).
 
 ## How to use it
 

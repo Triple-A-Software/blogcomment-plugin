@@ -6,13 +6,13 @@ use std::collections::HashMap;
 use axum::{
     Json,
     extract::State,
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 
-use crate::{AppState, antispam, database, render};
+use crate::{AppState, antispam, database, email, render, utils::escape_html};
 
 // ---------------------------------------------------------------------------
 // Helper: {{ comments(post.id) }}
@@ -106,6 +106,7 @@ pub async fn comments_helper(State(state): State<AppState>, Json(body): Json<Hel
 #[derive(Deserialize)]
 pub struct CommentForm {
     pub post_id: Option<String>,
+    pub parent_id: Option<String>,
     pub author_name: Option<String>,
     pub author_email: Option<String>,
     pub body: Option<String>,
@@ -156,7 +157,9 @@ pub async fn submit(
         .filter(|s| s.contains('@') && s.chars().count() <= 254 && !s.is_empty())
         .map(str::to_string);
 
-    match process(&state, &headers, post_id, &name, email.as_deref(), &body, &form).await {
+    let parent_id = form.parent_id.as_deref().and_then(|s| s.trim().parse::<i64>().ok()).filter(|n| *n > 0);
+
+    match process(&state, &headers, post_id, parent_id, &name, email.as_deref(), &body, &form).await {
         Ok(flag) => redirect_back(&redirect, flag),
         Err(e) => {
             tracing::error!("comment submit failed: {e}");
@@ -165,17 +168,25 @@ pub async fn submit(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process(
     state: &AppState,
     headers: &HeaderMap,
     post_id: i32,
+    parent_id: Option<i64>,
     name: &str,
-    email: Option<&str>,
+    email_addr: Option<&str>,
     body: &str,
     form: &CommentForm,
 ) -> crate::utils::AppResult<&'static str> {
     // The post must exist and be public.
-    if database::get_cms_post(&state.cms_db, post_id).await?.is_none() {
+    let Some(post) = database::get_cms_post(&state.cms_db, post_id).await? else {
+        return Ok("error");
+    };
+    // A reply's parent must be an approved comment on the same post.
+    if let Some(pid) = parent_id
+        && !database::is_valid_parent(&state.db, pid, post_id).await?
+    {
         return Ok("error");
     }
     let settings = database::get_settings(&state.db).await?;
@@ -196,10 +207,138 @@ async fn process(
     }
 
     let ua = headers.get("user-agent").and_then(|v| v.to_str().ok());
-    let status = if settings.require_moderation { "pending" } else { "approved" };
-    database::insert_comment(&state.db, post_id, None, name, email, body, status, ip.as_deref(), ua).await?;
 
-    Ok(if settings.require_moderation { "received" } else { "posted" })
+    // Akismet (optional) can force a comment straight to 'spam'.
+    let mut status = if settings.require_moderation { "pending" } else { "approved" };
+    if let Some(key) = settings.akismet_key.as_deref().filter(|k| !k.is_empty())
+        && let Some(blog) = site_url(headers)
+    {
+        let is_spam = antispam::akismet_is_spam(
+            key,
+            &blog,
+            ip.as_deref().unwrap_or(""),
+            ua.unwrap_or(""),
+            name,
+            email_addr,
+            body,
+        )
+        .await;
+        if is_spam {
+            status = "spam";
+        }
+    }
+
+    database::insert_comment(&state.db, post_id, parent_id, name, email_addr, body, status, ip.as_deref(), ua).await?;
+
+    // Notifications (best-effort, detached — never block or fail the response).
+    if status != "spam" {
+        notify(state, &settings, parent_id, &post.title, name, body).await;
+    }
+
+    Ok(match status {
+        "approved" => "posted",
+        _ => "received",
+    })
+}
+
+/// Fire off notification emails without blocking the response.
+async fn notify(
+    state: &AppState,
+    settings: &crate::model::CommentSettings,
+    parent_id: Option<i64>,
+    post_title: &str,
+    author: &str,
+    body: &str,
+) {
+    let snippet = escape_html(&body.chars().take(400).collect::<String>());
+    let title = escape_html(post_title);
+    let who = escape_html(author);
+
+    // Moderator notification on every new comment.
+    if let Some(to) = settings.notify_email.clone().filter(|s| !s.is_empty()) {
+        let subject = format!("Neuer Kommentar: {post_title}");
+        let html = format!(
+            "<p>Ein neuer Kommentar von <strong>{who}</strong> zu „{title}“ wartet auf Freigabe.</p><blockquote>{snippet}</blockquote>"
+        );
+        tokio::spawn(async move { email::send(&to, &subject, &html).await });
+    }
+
+    // Reply notification to the parent comment's author, if they left an email.
+    if let Some(pid) = parent_id
+        && let Ok(Some(to)) = database::author_email(&state.db, pid).await
+        && !to.is_empty()
+    {
+        let subject = format!("Neue Antwort auf Ihren Kommentar: {post_title}");
+        let html = format!(
+            "<p><strong>{who}</strong> hat auf Ihren Kommentar zu „{title}“ geantwortet:</p><blockquote>{snippet}</blockquote>"
+        );
+        tokio::spawn(async move { email::send(&to, &subject, &html).await });
+    }
+}
+
+/// Build the site URL from the forwarded Host header — Akismet keys on it.
+fn site_url(headers: &HeaderMap) -> Option<String> {
+    let host = headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get("host"))
+        .and_then(|v| v.to_str().ok())?
+        .trim();
+    if host.is_empty() || host.starts_with("localhost") || host.starts_with("127.0.0.1") {
+        return None;
+    }
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("https");
+    Some(format!("{scheme}://{host}"))
+}
+
+// ---------------------------------------------------------------------------
+// Reactions: POST /comments/react
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct ReactForm {
+    pub comment_id: Option<String>,
+    pub redirect: Option<String>,
+}
+
+/// Like a comment. Enhanced clients send `Accept: application/json` and get the
+/// new count back; a plain form post redirects to the comment anchor.
+pub async fn react(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Form(form): axum::extract::Form<ReactForm>,
+) -> Response {
+    let wants_json = headers
+        .get("accept")
+        .and_then(|v| v.to_str().ok())
+        .map(|a| a.contains("application/json"))
+        .unwrap_or(false);
+    let redirect = sanitize_redirect(form.redirect.as_deref());
+
+    let Some(comment_id) = form.comment_id.as_deref().and_then(|s| s.trim().parse::<i64>().ok()) else {
+        return if wants_json {
+            (StatusCode::BAD_REQUEST, Json(json!({ "error": "bad id" }))).into_response()
+        } else {
+            Redirect::to(&redirect).into_response()
+        };
+    };
+
+    // Behind the proxy the real IP is often unavailable; "anon" collapses those
+    // together, so anonymous likes are capped rather than unlimited.
+    let ip = antispam::client_ip(&headers).unwrap_or_else(|| "anon".to_string());
+    let likes = database::react(&state.db, comment_id, &ip).await.unwrap_or(None);
+
+    if wants_json {
+        match likes {
+            Some(n) => Json(json!({ "likes": n })).into_response(),
+            None => (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" }))).into_response(),
+        }
+    } else {
+        let base = redirect.split('?').next().unwrap_or(&redirect);
+        Redirect::to(&format!("{base}#comment-{comment_id}")).into_response()
+    }
 }
 
 /// Only allow same-site relative paths as the redirect target (no open redirect).

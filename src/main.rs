@@ -35,6 +35,7 @@ async fn main() {
         // Admin API
         .route("/api/comments", get(admin::list))
         .route("/api/comments/moderate", post(admin::moderate))
+        .route("/api/comments/erase", post(admin::erase))
         .route("/api/stats", get(admin::stats))
         .route(
             "/api/settings",
@@ -48,6 +49,8 @@ async fn main() {
         // Public comment submit (the form always POSTs urlencoded data, which
         // Neleto forwards unchanged for an allow_select_layout=false page).
         .route("/comments/submit", post(public::submit))
+        // Public like endpoint (JSON for enhanced clients, redirect otherwise).
+        .route("/comments/react", post(public::react))
         .layer(NormalizePathLayer::trim_trailing_slash())
         .layer(
             TraceLayer::new_for_http()

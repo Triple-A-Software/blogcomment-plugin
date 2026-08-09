@@ -23,6 +23,8 @@ pub async fn route_update_settings(
         captcha_provider: provider,
         captcha_site_key: trim_opt(body.captcha_site_key),
         captcha_secret: trim_opt(body.captcha_secret),
+        notify_email: trim_opt(body.notify_email),
+        akismet_key: trim_opt(body.akismet_key),
     };
     database::update_settings(&state.db, &clean).await?;
     Ok(Json(database::get_settings(&state.db).await?))

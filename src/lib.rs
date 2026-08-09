@@ -6,6 +6,7 @@ use sqlx::PgPool;
 pub mod antispam;
 pub mod api;
 pub mod database;
+pub mod email;
 pub mod model;
 pub mod render;
 pub mod utils;

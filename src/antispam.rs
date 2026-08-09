@@ -95,6 +95,47 @@ pub async fn verify_captcha(
     }
 }
 
+/// Ask Akismet whether a comment is spam. `blog` is the site URL Akismet keys
+/// on. Fails open (returns `false`) on any error — moderation still applies, so
+/// a flaky Akismet never blocks legitimate comments.
+#[allow(clippy::too_many_arguments)]
+pub async fn akismet_is_spam(
+    key: &str,
+    blog: &str,
+    user_ip: &str,
+    user_agent: &str,
+    author: &str,
+    email: Option<&str>,
+    content: &str,
+) -> bool {
+    let enc = urlencoding::encode;
+    let mut form = format!(
+        "blog={}&user_ip={}&user_agent={}&comment_type=comment&comment_author={}&comment_content={}",
+        enc(blog),
+        enc(user_ip),
+        enc(user_agent),
+        enc(author),
+        enc(content),
+    );
+    if let Some(email) = email {
+        form.push_str(&format!("&comment_author_email={}", enc(email)));
+    }
+    let url = format!("https://{key}.rest.akismet.com/1.1/comment-check");
+    match reqwest::Client::new()
+        .post(&url)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(form)
+        .send()
+        .await
+    {
+        Ok(res) => res.text().await.map(|t| t.trim() == "true").unwrap_or(false),
+        Err(e) => {
+            tracing::warn!("akismet check failed: {e}");
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

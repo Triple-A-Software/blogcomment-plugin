@@ -45,3 +45,24 @@ pub async fn moderate(
 pub async fn stats(State(state): State<AppState>) -> AppResult<Json<Stats>> {
     Ok(Json(database::stats(&state.db, &state.cms_db).await?))
 }
+
+#[derive(Deserialize)]
+pub struct EraseRequest {
+    pub email: String,
+    /// Keep the comment text but strip identifying fields, instead of deleting.
+    #[serde(default)]
+    pub anonymize: bool,
+}
+
+/// POST /api/comments/erase — GDPR erasure of all comments for an email address.
+pub async fn erase(
+    State(state): State<AppState>,
+    Json(req): Json<EraseRequest>,
+) -> AppResult<Json<Value>> {
+    let email = req.email.trim();
+    if email.is_empty() || !email.contains('@') {
+        return Err(AppError::BadRequest("a valid email is required".into()));
+    }
+    let affected = database::erase_by_email(&state.db, email, req.anonymize).await?;
+    Ok(Json(json!({ "affected": affected })))
+}

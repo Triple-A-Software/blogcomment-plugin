@@ -142,9 +142,33 @@
                 <label for="captcha_secret">Captcha secret</label>
                 <input id="captcha_secret" type="text" autocomplete="off">
             </div>
+            <div class="field">
+                <label for="notify_email">Notification email</label>
+                <input id="notify_email" type="email" autocomplete="off" placeholder="you@example.com">
+                <span class="hint">Notified whenever a new comment is submitted. Leave blank to disable.</span>
+            </div>
+            <div class="field">
+                <label for="akismet_key">Akismet API key</label>
+                <input id="akismet_key" type="text" autocomplete="off">
+                <span class="hint">Optional automatic spam filtering. Spammy comments are stored as Spam.</span>
+            </div>
             <div class="row">
                 <button class="primary" id="save-settings">Save settings</button>
                 <span id="settings-status"></span>
+            </div>
+        </div>
+
+        <h2>Privacy — erase by email (GDPR)</h2>
+        <div class="panel">
+            <div class="field">
+                <label for="erase_email">Commenter email</label>
+                <input id="erase_email" type="email" autocomplete="off" placeholder="person@example.com">
+                <span class="hint">Handle a data-subject request: anonymize keeps the comment text but removes name/email/IP; delete removes the comments entirely.</span>
+            </div>
+            <div class="row">
+                <button id="anonymize">Anonymize</button>
+                <button class="danger" id="erase">Delete</button>
+                <span id="erase-status"></span>
             </div>
         </div>
     </main>
@@ -222,6 +246,8 @@
             document.getElementById("captcha_provider").value = s.captcha_provider || "none";
             document.getElementById("captcha_site_key").value = s.captcha_site_key || "";
             document.getElementById("captcha_secret").value = s.captcha_secret || "";
+            document.getElementById("notify_email").value = s.notify_email || "";
+            document.getElementById("akismet_key").value = s.akismet_key || "";
         }
 
         document.getElementById("save-settings").addEventListener("click", async (e) => {
@@ -233,6 +259,8 @@
                 captcha_provider: document.getElementById("captcha_provider").value,
                 captcha_site_key: document.getElementById("captcha_site_key").value.trim() || null,
                 captcha_secret: document.getElementById("captcha_secret").value.trim() || null,
+                notify_email: document.getElementById("notify_email").value.trim() || null,
+                akismet_key: document.getElementById("akismet_key").value.trim() || null,
             };
             try {
                 const s = await fetch(api("/api/settings"), {
@@ -246,6 +274,26 @@
             e.target.disabled = false;
             setTimeout(() => { status.textContent = ""; }, 2500);
         });
+
+        async function erase(anonymize) {
+            const email = document.getElementById("erase_email").value.trim();
+            const status = document.getElementById("erase-status");
+            if (!email) { status.textContent = "Enter an email."; return; }
+            const verb = anonymize ? "anonymize" : "delete";
+            if (!confirm(`This will ${verb} all comments from ${email}. Continue?`)) return;
+            status.textContent = "Working…";
+            try {
+                const r = await fetch(api("/api/comments/erase"), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, anonymize }),
+                }).then(r => r.json());
+                status.textContent = `${verb === "delete" ? "Deleted" : "Anonymized"} ${r.affected} comment(s).`;
+                await refresh();
+            } catch { status.textContent = "Failed."; }
+        }
+        document.getElementById("anonymize").addEventListener("click", () => erase(true));
+        document.getElementById("erase").addEventListener("click", () => erase(false));
 
         refresh();
         loadSettings();

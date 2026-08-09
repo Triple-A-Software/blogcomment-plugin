@@ -22,9 +22,11 @@ pub struct CmsPost {
 #[derive(Debug, Clone, FromRow)]
 pub struct CommentPublic {
     pub id: i64,
+    pub parent_id: Option<i64>,
     pub author_name: String,
     pub body: String,
     pub created_at: DateTime<Utc>,
+    pub likes: i64,
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +76,10 @@ pub struct CommentSettings {
     pub captcha_provider: String,
     pub captcha_site_key: Option<String>,
     pub captcha_secret: Option<String>,
+    /// Address notified when a new comment is submitted (empty = off).
+    pub notify_email: Option<String>,
+    /// Akismet API key for automatic spam scoring (empty = off).
+    pub akismet_key: Option<String>,
 }
 
 impl Default for CommentSettings {
@@ -84,6 +90,8 @@ impl Default for CommentSettings {
             captcha_provider: "none".to_string(),
             captcha_site_key: None,
             captcha_secret: None,
+            notify_email: None,
+            akismet_key: None,
         }
     }
 }
