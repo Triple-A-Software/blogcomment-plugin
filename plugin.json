@@ -1,7 +1,8 @@
 {
     "$schema": "https://neleto.io/schemas/main/plugin_manifest_schema.json",
     "name": "blog-comments",
-    "version": "1.2.0",
+    "version": "1.2.1",
+    "hero_image": "assets/hero.png",
     "bin": "./target/x86_64-unknown-linux-gnu/release/blog-comments",
     "include_files": [
         "ui/dist/**/*",
