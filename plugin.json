@@ -34,23 +34,23 @@
     "api": [
         {
             "route": "/api/comments",
-            "allowed_roles": ["admin", "developer", "editor"]
+            "allowed_permissions": ["page.update"]
         },
         {
             "route": "/api/comments/moderate",
-            "allowed_roles": ["admin", "developer", "editor"]
+            "allowed_permissions": ["page.update"]
         },
         {
             "route": "/api/comments/erase",
-            "allowed_roles": ["admin", "developer"]
+            "allowed_permissions": ["settings.update"]
         },
         {
             "route": "/api/stats",
-            "allowed_roles": ["admin", "developer", "editor"]
+            "allowed_permissions": ["page.update"]
         },
         {
             "route": "/api/settings",
-            "allowed_roles": ["admin", "developer"]
+            "allowed_permissions": ["settings.update"]
         }
     ],
     "dashboard_cards": [
